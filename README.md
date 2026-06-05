@@ -10,23 +10,21 @@ Install `nix-direnv`, then allow the environment once:
 direnv allow
 ```
 
-The shell provides Python, Click, pytest, ruff, and build tooling.
+The shell provides Python, Click, pytest, ruff, build tooling, and a local
+`dev-agent` command wired to the current source tree.
 
 ## Usage
 
-Run the CLI directly:
+Run the CLI directly from the development shell:
 
 ```sh
-python -m dev_agent_cli --help
-python -m dev_agent_cli hello Alice
-```
-
-Install the local console script in editable mode when needed:
-
-```sh
-pip install -e .
 dev-agent --help
+dev-agent hello Alice
+dev-agent index .
 ```
+
+The `dev-agent` command is provided by `shell.nix`, so `pip install -e .` is not
+required for day-to-day development.
 
 ## Development
 

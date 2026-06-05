@@ -31,4 +31,26 @@ def hello(name: str) -> None:
 def index(path: Path) -> None:
     """Index a project directory."""
     root = path.resolve()
+
     click.echo(f"Indexing directory: {root}")
+
+    indexed_count = 0
+
+    for file_path in iter_project_files(root):
+        click.echo(file_path.relative_to(root))
+        indexed_count += 1
+
+    click.echo(f"Indexed {indexed_count} files.")
+
+
+def iter_project_files(root: Path):
+    for file_path in root.rglob("*"):
+        if should_ignore(file_path):
+            continue
+
+        if file_path.is_file():
+            yield file_path
+
+
+def should_ignore(path: Path) -> bool:
+    return any(part in IGNORED_DIRS for part in path.parts)
