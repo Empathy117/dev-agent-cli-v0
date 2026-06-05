@@ -23,8 +23,9 @@ dev-agent hello Alice
 dev-agent index .
 ```
 
-The `dev-agent` command is provided by `shell.nix`, so `pip install -e .` is not
-required for day-to-day development.
+The `dev-agent` command is provided by the Nix flake dev shell, so
+`pip install -e .` is not required for day-to-day development. The generated
+`flake.lock` pins the nixpkgs revision used by the environment.
 
 ## Development
 
