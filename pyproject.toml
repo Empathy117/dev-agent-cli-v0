@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dev-agent-cli"
+version = "0.1.0"
+description = "A Python Click CLI scaffold"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "click>=8.1",
+]
+
+[project.scripts]
+dev-agent = "dev_agent_cli.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
