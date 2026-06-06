@@ -1,10 +1,10 @@
+from pathlib import Path
+
 import click
-from pathlib import Path
-import os
-from collections.abc import Iterator
-from pathlib import Path
 
 from dev_agent_cli import __version__
+from dev_agent_cli.learning_core import backend_name
+from dev_agent_cli.product.indexing import index_project
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -19,31 +19,13 @@ def hello(name: str) -> None:
     """Print a greeting."""
     click.echo(f"Hello, {name}!")
 
-@click.group(context_settings={"help_option_names": ["-h", "--help"]})
-@click.version_option(version=__version__, prog_name="dev-agent")
-def main() -> None:
-    """Development CLI entry point."""
+
+@main.command("core-info")
+def core_info() -> None:
+    """Show which Learning Core backend is active."""
+    click.echo(f"Learning Core backend: {backend_name()}")
 
 
-@main.command()
-@click.argument("name", default="world", required=False)
-def hello(name: str) -> None:
-    """Print a greeting."""
-    click.echo(f"Hello, {name}!")
-
-
-DEFAULT_IGNORED_DIRS = {
-    ".git",
-    ".venv",
-    "venv",
-    "__pycache__",
-    ".mypy_cache",
-    ".ruff_cache",
-    "node_modules",
-    "dist",
-    "build",
-    ".direnv",
-}
 @main.command()
 @click.argument(
     "path",
@@ -73,40 +55,18 @@ def index(
     no_default_ignore: bool,
 ) -> None:
     """Index a project directory."""
-    root = path.resolve()
+    result = index_project(
+        path,
+        extra_ignored_dirs=ignored_dirs,
+        use_default_ignored_dirs=not no_default_ignore,
+    )
 
-    ignore_dirs = set(ignored_dirs)
+    click.echo(f"Indexing directory: {result.root}")
 
-    if not no_default_ignore:
-        ignore_dirs.update(DEFAULT_IGNORED_DIRS)
+    if result.ignored_dirs:
+        click.echo(f"Ignoring directories: {', '.join(result.ignored_dirs)}")
 
-    click.echo(f"Indexing directory: {root}")
+    for relative_path in result.relative_files:
+        click.echo(relative_path.as_posix())
 
-    if ignore_dirs:
-        click.echo(f"Ignoring directories: {', '.join(sorted(ignore_dirs))}")
-
-    indexed_count = 0
-
-    for file_path in iter_project_files(root, ignore_dirs):
-        click.echo(file_path.relative_to(root))
-        indexed_count += 1
-
-    click.echo(f"Indexed {indexed_count} files.")
-
-
-def iter_project_files(root: Path, ignored_dirs: set[str]) -> Iterator[Path]:
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [
-            dirname
-            for dirname in dirnames
-            if dirname not in ignored_dirs
-        ]
-
-        current_dir = Path(dirpath)
-
-        for filename in filenames:
-            yield current_dir / filename
-
-
-def should_ignore(path: Path, ignored_dirs: set[str]) -> bool:
-    return any(part in ignored_dirs for part in path.parts)
+    click.echo(f"Indexed {len(result.relative_files)} files.")

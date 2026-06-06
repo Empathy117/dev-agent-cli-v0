@@ -18,6 +18,9 @@ dev-agent = "dev_agent_cli.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+dev_agent_cli = ["py.typed"]
+
 [tool.ruff]
 line-length = 88
 target-version = "py312"

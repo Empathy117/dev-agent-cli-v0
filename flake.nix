@@ -38,9 +38,13 @@
             name = "dev-agent";
             runtimeInputs = [
               pythonEnv
+              pkgs.stdenv.cc
             ];
             text = ''
-              export PYTHONPATH="$PWD/src''${PYTHONPATH:+:$PYTHONPATH}"
+              project_root="''${DEV_AGENT_PROJECT_ROOT:-$PWD}"
+              cd "$project_root"
+              python setup.py build_ext --inplace --quiet
+              export PYTHONPATH="$project_root/src''${PYTHONPATH:+:$PYTHONPATH}"
               exec python -m dev_agent_cli "$@"
             '';
           };
@@ -53,6 +57,7 @@
             ];
 
             shellHook = ''
+              export DEV_AGENT_PROJECT_ROOT="$PWD"
               export PYTHONPATH="$PWD/src''${PYTHONPATH:+:$PYTHONPATH}"
               echo "Python Click CLI dev shell ready"
               echo "Try: dev-agent --help"
