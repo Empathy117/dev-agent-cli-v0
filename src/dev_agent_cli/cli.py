@@ -1,5 +1,8 @@
 import click
 from pathlib import Path
+import os
+from collections.abc import Iterator
+from pathlib import Path
 
 from dev_agent_cli import __version__
 
@@ -16,20 +19,6 @@ def hello(name: str) -> None:
     """Print a greeting."""
     click.echo(f"Hello, {name}!")
 
-DEFAULT_IGNORED_DIRS = {
-    ".git",
-    ".venv",
-    "venv",
-    "__pycache__",
-    ".mypy_cache",
-    ".ruff_cache",
-    "node_modules",
-    "dist",
-    "build",
-    ".direnv",
-}
-
-
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.version_option(version=__version__, prog_name="dev-agent")
 def main() -> None:
@@ -43,6 +32,18 @@ def hello(name: str) -> None:
     click.echo(f"Hello, {name}!")
 
 
+DEFAULT_IGNORED_DIRS = {
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".mypy_cache",
+    ".ruff_cache",
+    "node_modules",
+    "dist",
+    "build",
+    ".direnv",
+}
 @main.command()
 @click.argument(
     "path",
@@ -93,13 +94,18 @@ def index(
     click.echo(f"Indexed {indexed_count} files.")
 
 
-def iter_project_files(root: Path, ignored_dirs: set[str]):
-    for file_path in root.rglob("*"):
-        if should_ignore(file_path, ignored_dirs):
-            continue
+def iter_project_files(root: Path, ignored_dirs: set[str]) -> Iterator[Path]:
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [
+            dirname
+            for dirname in dirnames
+            if dirname not in ignored_dirs
+        ]
 
-        if file_path.is_file():
-            yield file_path
+        current_dir = Path(dirpath)
+
+        for filename in filenames:
+            yield current_dir / filename
 
 
 def should_ignore(path: Path, ignored_dirs: set[str]) -> bool:
