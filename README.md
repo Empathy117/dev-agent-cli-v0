@@ -45,8 +45,18 @@ The Product Layer owns CLI behavior, user-facing options, output formatting,
 and workflow decisions.
 
 The Learning Core owns the lower-level implementation. The current scanner is a
-C++ CPython extension that uses `std::filesystem` to walk directories and the
-Python C API to return Python objects.
+C++ CPython extension that calls POSIX APIs directly:
+
+```text
+opendir  -> open a directory stream
+readdir  -> read one directory entry at a time
+lstat    -> ask the OS what kind of thing the path points to
+closedir -> release the directory stream
+```
+
+Recursion is implemented manually in `learning_core.cpp`; the OS does not walk
+the tree for us. The C++ code also constructs the Python `list[str]` result with
+the Python C API before handing control back to the Product Layer.
 
 Useful commands:
 

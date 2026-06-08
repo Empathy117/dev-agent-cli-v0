@@ -5,7 +5,7 @@ from pathlib import Path
 def backend_name() -> str:
     """Return the active implementation used by the Learning Core facade."""
     native_core()
-    return "c++/cpython-extension"
+    return "c++/cpython-posix-extension"
 
 
 def scan_project_files(root: Path, ignored_dirs: Iterable[str]) -> list[Path]:

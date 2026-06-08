@@ -1,11 +1,13 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
-#include <filesystem>
+#include <cerrno>
+#include <cstring>
+#include <dirent.h>
 #include <string>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unordered_set>
-
-namespace fs = std::filesystem;
 
 namespace {
 
@@ -47,10 +49,28 @@ bool collect_ignored_dirs(
     return !PyErr_Occurred();
 }
 
-bool append_relative_path(PyObject *result, const fs::path &root, const fs::path &path) {
-    fs::path relative_path = fs::relative(path, root);
-    std::string relative_path_text = relative_path.generic_string();
-    PyObject *py_path = PyUnicode_FromString(relative_path_text.c_str());
+std::string join_path(const std::string &parent, const std::string &name) {
+    if (parent.empty() || parent == "/") {
+        return parent + name;
+    }
+
+    return parent + "/" + name;
+}
+
+std::string join_relative_path(const std::string &parent, const std::string &name) {
+    if (parent.empty()) {
+        return name;
+    }
+
+    return parent + "/" + name;
+}
+
+bool is_current_or_parent_dir(const char *name) {
+    return std::strcmp(name, ".") == 0 || std::strcmp(name, "..") == 0;
+}
+
+bool append_relative_path(PyObject *result, const std::string &relative_path) {
+    PyObject *py_path = PyUnicode_FromString(relative_path.c_str());
 
     if (py_path == nullptr) {
         return false;
@@ -60,6 +80,90 @@ bool append_relative_path(PyObject *result, const fs::path &root, const fs::path
     Py_DECREF(py_path);
 
     return append_result == 0;
+}
+
+bool raise_os_error(const std::string &operation, const std::string &path) {
+    std::string message = operation + " failed for " + path + ": " + std::strerror(errno);
+    PyErr_SetString(PyExc_OSError, message.c_str());
+    return false;
+}
+
+bool walk_directory(
+    const std::string &root,
+    const std::string &relative_dir,
+    const std::unordered_set<std::string> &ignored_dirs,
+    PyObject *result
+) {
+    std::string dir_path = relative_dir.empty() ? root : join_path(root, relative_dir);
+    DIR *dir = opendir(dir_path.c_str());
+
+    if (dir == nullptr) {
+        if (errno == EACCES || errno == ENOENT) {
+            return true;
+        }
+
+        return raise_os_error("opendir", dir_path);
+    }
+
+    errno = 0;
+    dirent *entry = nullptr;
+
+    while ((entry = readdir(dir)) != nullptr) {
+        const char *entry_name = entry->d_name;
+
+        if (is_current_or_parent_dir(entry_name)) {
+            continue;
+        }
+
+        std::string name(entry_name);
+        std::string relative_path = join_relative_path(relative_dir, name);
+        std::string full_path = join_path(root, relative_path);
+
+        struct stat metadata {};
+
+        if (lstat(full_path.c_str(), &metadata) != 0) {
+            if (errno == EACCES || errno == ENOENT) {
+                errno = 0;
+                continue;
+            }
+
+            closedir(dir);
+            return raise_os_error("lstat", full_path);
+        }
+
+        if (S_ISDIR(metadata.st_mode)) {
+            if (ignored_dirs.find(name) != ignored_dirs.end()) {
+                continue;
+            }
+
+            if (!walk_directory(root, relative_path, ignored_dirs, result)) {
+                closedir(dir);
+                return false;
+            }
+
+            continue;
+        }
+
+        if (S_ISREG(metadata.st_mode)) {
+            if (!append_relative_path(result, relative_path)) {
+                closedir(dir);
+                return false;
+            }
+        }
+    }
+
+    if (errno != 0) {
+        int readdir_errno = errno;
+        closedir(dir);
+        errno = readdir_errno;
+        return raise_os_error("readdir", dir_path);
+    }
+
+    if (closedir(dir) != 0) {
+        return raise_os_error("closedir", dir_path);
+    }
+
+    return true;
 }
 
 PyObject *scan_project_files(PyObject *, PyObject *args) {
@@ -76,42 +180,15 @@ PyObject *scan_project_files(PyObject *, PyObject *args) {
         return nullptr;
     }
 
-    fs::path root(root_text);
+    std::string root(root_text);
     PyObject *result = PyList_New(0);
 
     if (result == nullptr) {
         return nullptr;
     }
 
-    try {
-        fs::recursive_directory_iterator iterator(
-            root,
-            fs::directory_options::skip_permission_denied
-        );
-        fs::recursive_directory_iterator end;
-
-        for (; iterator != end; ++iterator) {
-            const fs::directory_entry &entry = *iterator;
-            std::string filename = entry.path().filename().string();
-
-            if (
-                entry.is_directory()
-                && ignored_dirs.find(filename) != ignored_dirs.end()
-            ) {
-                iterator.disable_recursion_pending();
-                continue;
-            }
-
-            if (entry.is_regular_file()) {
-                if (!append_relative_path(result, root, entry.path())) {
-                    Py_DECREF(result);
-                    return nullptr;
-                }
-            }
-        }
-    } catch (const fs::filesystem_error &error) {
+    if (!walk_directory(root, "", ignored_dirs, result)) {
         Py_DECREF(result);
-        PyErr_SetString(PyExc_OSError, error.what());
         return nullptr;
     }
 
